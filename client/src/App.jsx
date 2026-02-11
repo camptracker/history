@@ -22,7 +22,7 @@ function FeedCard({ item }) {
         {item.date && <span className="feed-card__date">{item.date}</span>}
       </div>
 
-      {item.imageUrl && (
+      {item.imageUrl && item.type !== 'book' && (
         <div className={`feed-card__image ${item.type === 'fashion' ? 'feed-card__image--large' : ''}`}>
           <img src={item.imageUrl} alt={item.title} loading="lazy" />
         </div>
