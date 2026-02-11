@@ -25,42 +25,93 @@ function isDuplicate(item, existing) {
   return false;
 }
 
+async function searchYouTube(query) {
+  // Try multiple Invidious instances (public, no API key needed, works from servers)
+  const instances = [
+    'https://vid.puffyan.us',
+    'https://invidious.fdn.fr',
+    'https://y.com.sb',
+    'https://invidious.nerdvpn.de',
+  ];
+  
+  for (const instance of instances) {
+    try {
+      const url = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const results = await res.json();
+      return (results || []).filter(r => r.type === 'video').map(r => ({
+        videoId: r.videoId,
+        title: r.title,
+        channelName: r.author || '',
+        description: r.description || '',
+        viewCount: r.viewCount || null,
+        lengthSeconds: r.lengthSeconds || null,
+      }));
+    } catch {
+      continue;
+    }
+  }
+
+  // Fallback: scrape YouTube directly
+  try {
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+    const res = await fetch(searchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    });
+    const html = await res.text();
+    const allMatches = [...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map(m => m[1]);
+    return [...new Set(allMatches)].map(id => ({ videoId: id, title: null, channelName: '', description: '' }));
+  } catch {
+    return [];
+  }
+}
+
 async function generateVideos(existing) {
-  const queries = ['best salsa dancing', 'acoustic guitar cover'];
+  // Vary the search queries for freshness
+  const salsaVariants = ['salsa dancing', 'best salsa dance', 'salsa performance', 'salsa bachata dance', 'latin dance salsa'];
+  const guitarVariants = ['acoustic guitar cover', 'guitar cover popular song', 'acoustic cover song', 'fingerstyle guitar cover', 'unplugged guitar cover'];
+  
+  const salsaQuery = salsaVariants[Math.floor(Math.random() * salsaVariants.length)];
+  const guitarQuery = guitarVariants[Math.floor(Math.random() * guitarVariants.length)];
+  const queries = [salsaQuery, guitarQuery];
+  
   const items = [];
   for (const q of queries) {
     try {
-      // Add timestamp to vary results
-      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q + ' ' + new Date().getFullYear())}`;
-      const res = await fetch(searchUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-      });
-      const html = await res.text();
-      const allMatches = [...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map(m => m[1]);
-      const uniqueIds = [...new Set(allMatches)];
+      const results = await searchYouTube(q);
       
       // Find first video we haven't used before
-      const videoId = uniqueIds.find(id => !existing.videoIds.has(id));
-      if (!videoId) continue;
+      const match = results.find(r => r.videoId && !existing.videoIds.has(r.videoId));
+      if (!match) {
+        console.log(`  No new videos found for "${q}" (${results.length} results, all seen)`);
+        continue;
+      }
       
-      existing.videoIds.add(videoId); // prevent same video in both queries
+      const { videoId } = match;
+      existing.videoIds.add(videoId);
       
-      let title = q;
-      let channelName = '';
+      let title = match.title || q;
+      let channelName = match.channelName || '';
       const thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-      try {
-        const oembed = await fetchJSON(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
-        title = oembed.title || q;
-        channelName = oembed.author_name || '';
-      } catch {}
+      
+      // If we didn't get title from Invidious, try oEmbed
+      if (!match.title) {
+        try {
+          const oembed = await fetchJSON(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+          title = oembed.title || q;
+          channelName = oembed.author_name || channelName;
+        } catch {}
+      }
 
+      const desc = match.description || (channelName ? `By ${channelName}` : '');
       const item = {
         type: 'video', title,
-        description: channelName ? `By ${channelName}` : '',
-        summary: `Top result for "${q}" on YouTube`,
+        description: desc,
+        summary: channelName ? `${channelName} — found via "${q}"` : `Found via "${q}"`,
         imageUrl: thumbnail,
         links: [{ label: 'Watch on YouTube', url: `https://www.youtube.com/watch?v=${videoId}` }],
-        metadata: { videoId, channelName, viewCount: null, duration: null },
+        metadata: { videoId, channelName, viewCount: match.viewCount, duration: match.lengthSeconds },
       };
       if (!isDuplicate(item, existing)) items.push(item);
     } catch (e) {
