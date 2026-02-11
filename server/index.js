@@ -96,4 +96,4 @@ cron.schedule('0 0 * * *', async () => {
 }, { timezone: 'America/Los_Angeles' });
 
 await connectDB();
-app.listen(PORT, () => console.log(`History API running on http://localhost:${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`History API running on port ${PORT}`));
