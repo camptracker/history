@@ -175,7 +175,7 @@ async function generateHistory(existing) {
   const events = (data.events || []).sort((a, b) => (b.pages?.length || 0) - (a.pages?.length || 0));
   
   for (const ev of events) {
-    const title = `${ev.year}: ${(ev.text || 'Historical Event').slice(0, 100)}`;
+    const title = `${ev.year}: ${ev.text || 'Historical Event'}`;
     if (existing.titles.has(title.toLowerCase().trim())) continue;
     
     const page = ev.pages?.[0];
