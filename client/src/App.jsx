@@ -73,37 +73,33 @@ export default function App() {
   const [error, setError] = useState(null);
   const [generating, setGenerating] = useState(false);
 
-  const fetchAllItems = useCallback(async () => {
+  const fetchFeed = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`${API}/api/feed`);
       const json = await res.json();
-      if (json.count === 0) {
-        setGenerating(true);
-        await fetch(`${API}/api/generate`, { method: 'POST' });
-        setGenerating(false);
-        const res2 = await fetch(`${API}/api/feed`);
-        const json2 = await res2.json();
-        setItems(json2.items || []);
-      } else {
-        setItems(json.items || []);
-      }
+      setItems(json.items || []);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
-      setGenerating(false);
     }
   }, []);
 
-  useEffect(() => { fetchAllItems(); }, [fetchAllItems]);
+  useEffect(() => { fetchFeed(); }, [fetchFeed]);
 
-  const handleRegenerate = async () => {
+  const handleGenerateMore = async () => {
     setGenerating(true);
     try {
-      await fetch(`${API}/api/generate`, { method: 'POST' });
-      await fetchAllItems();
+      const res = await fetch(`${API}/api/generate`, { method: 'POST' });
+      const json = await res.json();
+      if (json.items?.length > 0) {
+        // Optimistically append new items to the bottom
+        setItems(prev => [...prev, ...json.items]);
+      }
+    } catch (e) {
+      setError(e.message);
     } finally {
       setGenerating(false);
     }
@@ -116,28 +112,30 @@ export default function App() {
         <p className="subtitle">Your curated feed of videos, books, trends & history</p>
       </header>
 
-      <div className="controls">
-        <button className="regen-btn" onClick={handleRegenerate} disabled={generating}>
-          {generating ? '⏳ Generating...' : '🔄 Regenerate Today'}
-        </button>
-      </div>
-
       {loading && (
         <div className="loading">
           <div className="spinner" />
-          <p>{generating ? 'Discovering content for you...' : 'Loading feed...'}</p>
+          <p>Loading feed...</p>
         </div>
       )}
 
       {error && <div className="error">⚠️ {error}</div>}
 
       {!loading && !error && (
-        <div className="feed">
-          {items.length === 0 && <p className="empty">No items yet. Hit Regenerate!</p>}
-          {items.map((item, i) => (
-            <FeedCard key={item._id || i} item={item} />
-          ))}
-        </div>
+        <>
+          <div className="feed">
+            {items.length === 0 && <p className="empty">No items yet. Generate some content below!</p>}
+            {items.map((item, i) => (
+              <FeedCard key={item._id || i} item={item} />
+            ))}
+          </div>
+
+          <div className="generate-more">
+            <button className="generate-btn" onClick={handleGenerateMore} disabled={generating}>
+              {generating ? '⏳ Discovering...' : '✨ Discover More'}
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

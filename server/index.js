@@ -4,7 +4,7 @@ import cron from 'node-cron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB, FeedItem } from './db.js';
-import { generateForDate } from './generate.js';
+import { generateMore } from './generate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -20,7 +20,7 @@ app.use(express.static(path.join(__dirname, '../client/dist')));
 // All items, newest first
 app.get('/api/feed', async (req, res) => {
   try {
-    const items = await FeedItem.find().sort({ date: -1, createdAt: -1 });
+    const items = await FeedItem.find().sort({ createdAt: -1 });
     res.json({ items, count: items.length });
   } catch (e) {
     console.error(e);
@@ -28,35 +28,47 @@ app.get('/api/feed', async (req, res) => {
   }
 });
 
-app.get('/api/feed/:date', async (req, res) => {
+// Generate more content (appends, never replaces)
+app.post('/api/generate', async (req, res) => {
   try {
-    const { date } = req.params;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({ error: 'Date must be YYYY-MM-DD format' });
-    }
-    const items = await FeedItem.find({ date }).sort({ createdAt: 1 });
-    res.json({ date, items, count: items.length });
+    const items = await generateMore();
+    res.json({ ok: true, items, count: items.length });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
   }
 });
 
-app.get('/api/dates', async (req, res) => {
+// One-time dedup endpoint
+app.post('/api/dedup', async (req, res) => {
   try {
-    const dates = await FeedItem.distinct('date');
-    dates.sort();
-    res.json(dates);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+    const all = await FeedItem.find().sort({ createdAt: 1 });
+    const seenTitles = new Set();
+    const seenVideoIds = new Set();
+    const toDelete = [];
 
-app.post('/api/generate', async (req, res) => {
-  try {
-    const date = req.body.date || todayStr();
-    const count = await generateForDate(date);
-    res.json({ ok: true, date, count });
+    for (const item of all) {
+      const titleKey = (item.title || '').toLowerCase().trim();
+      const videoId = item.metadata?.videoId;
+
+      let isDupe = false;
+      if (titleKey && seenTitles.has(titleKey)) isDupe = true;
+      if (videoId && seenVideoIds.has(videoId)) isDupe = true;
+
+      if (isDupe) {
+        toDelete.push(item._id);
+      } else {
+        if (titleKey) seenTitles.add(titleKey);
+        if (videoId) seenVideoIds.add(videoId);
+      }
+    }
+
+    if (toDelete.length > 0) {
+      await FeedItem.deleteMany({ _id: { $in: toDelete } });
+    }
+
+    const remaining = await FeedItem.countDocuments();
+    res.json({ ok: true, deleted: toDelete.length, remaining });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -67,9 +79,10 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
+// Daily cron at midnight PST
 cron.schedule('0 0 * * *', async () => {
   console.log('[CRON] Generating daily feed...');
-  await generateForDate(todayStr());
+  await generateMore();
   console.log('[CRON] Done.');
 }, { timezone: 'America/Los_Angeles' });
 
