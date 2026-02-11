@@ -121,6 +121,13 @@
   font-weight: 600;
 }
 
+.feed-card__date {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .feed-card__image {
   width: 100%;
   max-height: 220px;
@@ -163,10 +170,6 @@
   font-size: 0.9rem;
   line-height: 1.6;
   font-weight: 300;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .feed-card__quotes { margin-top: 0.5rem; }

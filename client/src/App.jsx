@@ -3,13 +3,6 @@ import './App.css';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-function pad(n) { return String(n).padStart(2, '0'); }
-function dateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-function formatDate(d) {
-  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-}
-function shiftDate(d, offset) { const n = new Date(d); n.setDate(n.getDate() + offset); return n; }
-
 const TYPE_CONFIG = {
   video: { emoji: '🎬', label: 'Video', color: '#e74c3c' },
   book: { emoji: '📚', label: 'Book', color: '#9b59b6' },
@@ -26,6 +19,7 @@ function FeedCard({ item }) {
       <div className="feed-card__badge">
         <span className="feed-card__emoji">{cfg.emoji}</span>
         <span className="feed-card__type">{cfg.label}</span>
+        {item.date && <span className="feed-card__date">{item.date}</span>}
       </div>
 
       {item.imageUrl && (
@@ -74,28 +68,22 @@ function FeedCard({ item }) {
 }
 
 export default function App() {
-  const [currentDate, setCurrentDate] = useState(new Date());
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [generating, setGenerating] = useState(false);
 
-  const fetchFeed = useCallback(async (date) => {
+  const fetchAllItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const ds = dateStr(date);
-      const res = await fetch(`${API}/api/feed/${ds}`);
+      const res = await fetch(`${API}/api/feed`);
       const json = await res.json();
       if (json.count === 0) {
         setGenerating(true);
-        await fetch(`${API}/api/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: ds }),
-        });
+        await fetch(`${API}/api/generate`, { method: 'POST' });
         setGenerating(false);
-        const res2 = await fetch(`${API}/api/feed/${ds}`);
+        const res2 = await fetch(`${API}/api/feed`);
         const json2 = await res2.json();
         setItems(json2.items || []);
       } else {
@@ -109,29 +97,17 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { fetchFeed(currentDate); }, [currentDate, fetchFeed]);
-
-  const goNext = () => setCurrentDate(d => shiftDate(d, 1));
-  const goPrev = () => setCurrentDate(d => shiftDate(d, -1));
-  const goToday = () => setCurrentDate(new Date());
+  useEffect(() => { fetchAllItems(); }, [fetchAllItems]);
 
   const handleRegenerate = async () => {
     setGenerating(true);
     try {
-      const ds = dateStr(currentDate);
-      await fetch(`${API}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: ds }),
-      });
-      await fetchFeed(currentDate);
+      await fetch(`${API}/api/generate`, { method: 'POST' });
+      await fetchAllItems();
     } finally {
       setGenerating(false);
     }
   };
-
-  const typeOrder = ['video', 'book', 'fashion', 'ai_trend', 'history'];
-  const sorted = [...items].sort((a, b) => typeOrder.indexOf(a.type) - typeOrder.indexOf(b.type));
 
   return (
     <div className="app">
@@ -140,18 +116,9 @@ export default function App() {
         <p className="subtitle">Your curated feed of videos, books, trends & history</p>
       </header>
 
-      <nav className="date-nav">
-        <button className="nav-btn" onClick={goPrev}>‹ Prev</button>
-        <div className="date-display">
-          <h2>{formatDate(currentDate)}</h2>
-          <button className="today-btn" onClick={goToday}>Today</button>
-        </div>
-        <button className="nav-btn" onClick={goNext}>Next ›</button>
-      </nav>
-
       <div className="controls">
         <button className="regen-btn" onClick={handleRegenerate} disabled={generating}>
-          {generating ? '⏳ Generating...' : '🔄 Regenerate Feed'}
+          {generating ? '⏳ Generating...' : '🔄 Regenerate Today'}
         </button>
       </div>
 
@@ -166,8 +133,8 @@ export default function App() {
 
       {!loading && !error && (
         <div className="feed">
-          {sorted.length === 0 && <p className="empty">No items yet. Hit Regenerate!</p>}
-          {sorted.map((item, i) => (
+          {items.length === 0 && <p className="empty">No items yet. Hit Regenerate!</p>}
+          {items.map((item, i) => (
             <FeedCard key={item._id || i} item={item} />
           ))}
         </div>

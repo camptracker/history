@@ -17,6 +17,17 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
+// All items, newest first
+app.get('/api/feed', async (req, res) => {
+  try {
+    const items = await FeedItem.find().sort({ date: -1, createdAt: -1 });
+    res.json({ items, count: items.length });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/feed/:date', async (req, res) => {
   try {
     const { date } = req.params;
