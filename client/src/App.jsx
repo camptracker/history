@@ -38,6 +38,9 @@ function EventCard({ item }) {
           <span className="event-type-badge" style={{ background: cfg.color }}>{cfg.emoji}</span>
         </div>
         <p className="event-text">{item.text}</p>
+        {item.pages?.[0]?.extract && (item.type === 'birth' || item.type === 'death') && (
+          <p className="event-extract">💬 {item.pages[0].extract}</p>
+        )}
         {item.pages?.length > 0 && (
           <div className="event-links">
             {item.pages.map((p, i) => (

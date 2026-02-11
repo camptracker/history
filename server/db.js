@@ -11,7 +11,7 @@ const eventSchema = new mongoose.Schema({
   date: { type: String, required: true, index: true },   // "MM-DD"
   year: { type: String },
   text: { type: String, required: true },
-  pages: [{ title: String, thumbnail: String, url: String }],
+  pages: [{ title: String, thumbnail: String, url: String, extract: String }],
   type: { type: String, enum: ['event', 'birth', 'death'], default: 'event' },
 }, { timestamps: true });
 
