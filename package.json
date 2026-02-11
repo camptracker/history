@@ -1,0 +1,14 @@
+{
+  "name": "history-app",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "start": "cd server && node index.js",
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "generate": "cd server && node generate.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
