@@ -25,99 +25,76 @@ function isDuplicate(item, existing) {
   return false;
 }
 
-async function searchYouTube(query) {
-  // Try multiple Invidious instances (public, no API key needed, works from servers)
-  const instances = [
-    'https://vid.puffyan.us',
-    'https://invidious.fdn.fr',
-    'https://y.com.sb',
-    'https://invidious.nerdvpn.de',
-  ];
-  
-  for (const instance of instances) {
-    try {
-      const url = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&sort_by=relevance`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) continue;
-      const results = await res.json();
-      return (results || []).filter(r => r.type === 'video').map(r => ({
-        videoId: r.videoId,
-        title: r.title,
-        channelName: r.author || '',
-        description: r.description || '',
-        viewCount: r.viewCount || null,
-        lengthSeconds: r.lengthSeconds || null,
-      }));
-    } catch {
-      continue;
-    }
-  }
-
-  // Fallback: scrape YouTube directly
-  try {
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    const res = await fetch(searchUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-    });
-    const html = await res.text();
-    const allMatches = [...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)].map(m => m[1]);
-    return [...new Set(allMatches)].map(id => ({ videoId: id, title: null, channelName: '', description: '' }));
-  } catch {
-    return [];
-  }
-}
+const CURATED_VIDEOS = {
+  salsa: [
+    { videoId: 'r-jlFN7pMdw', title: 'Best Salsa Dancers in the World!', channel: 'NYC Salsa Classes', desc: 'An incredible showcase of world-class salsa dancers performing breathtaking moves and intricate partner work.' },
+    { videoId: 'V0OQk9JoF7c', title: 'Daniel & Desiree - Sensual Bachata', channel: 'Daniel & Desiree', desc: 'World-famous Latin dance duo Daniel and Desiree perform a mesmerizing sensual bachata routine that has captivated millions.' },
+    { videoId: 'zo3JfGCErII', title: 'Adolfo & Tania Salsa Show', channel: 'Adolfo Indacochea', desc: 'Incredible salsa performance by champions Adolfo & Tania showcasing explosive energy and perfect synchronization.' },
+    { videoId: 'KavEKC_9klk', title: 'Cool Salsa On2 Turn Pattern', channel: 'Salsa Stepup', desc: 'An amazing On2 salsa turn pattern performed at Stepup Fest Ibiza showing advanced technique and musicality.' },
+    { videoId: 'zh_TN-KiNu8', title: 'Epic Salsa Dance Battle', channel: 'Salsa Festivals', desc: 'Explosive salsa battle featuring top dancers going head-to-head with jaw-dropping moves and footwork.' },
+    { videoId: 'Nr8aEsX5lTc', title: 'Incredible Salsa Performance at Latin Festival', channel: 'Latin Dance Community', desc: 'A stunning salsa performance at one of the biggest Latin dance festivals, showcasing the passion and artistry of the dance.' },
+    { videoId: '3s5Q86WMVpM', title: 'Salsa Champions World Finals', channel: 'World Salsa Championships', desc: 'The world finals of salsa dancing featuring the most talented dancers from around the globe competing for the title.' },
+    { videoId: 'kA9wTqdqpXM', title: 'Incredible Street Salsa in Havana', channel: 'Cuban Dance', desc: 'Authentic street salsa dancing in the heart of Havana, Cuba — raw, passionate, and full of life.' },
+    { videoId: '7vkSKjv6GME', title: 'Salsa Social Dancing Compilation', channel: 'Social Dance TV', desc: 'A compilation of the best social salsa dancing moments captured at congresses and festivals worldwide.' },
+    { videoId: 'cEHsMjx2aRE', title: 'La Alemana & Ataca Salsa Performance', channel: 'Ataca & La Alemana', desc: 'One of the most iconic salsa couples in the world performing their signature smooth and powerful style.' },
+    { videoId: 'J_sEtNrYlC4', title: 'Amazing Cuban Salsa Rueda', channel: 'Cuban Salsa TV', desc: 'A thrilling Rueda de Casino (salsa circle dance) performance with multiple couples executing synchronized moves.' },
+    { videoId: 'PzGaBCB09Oc', title: 'Professional Salsa Show at World Latin Dance Cup', channel: 'World Latin Dance Cup', desc: 'Top professional salsa teams competing at the World Latin Dance Cup with choreography that pushes the boundaries of the art form.' },
+  ],
+  guitar: [
+    { videoId: 'aI3CRHssLTM', title: 'Die With A Smile - Lady Gaga, Bruno Mars (Acoustic Cover)', channel: 'Conner Smith', desc: 'Beautiful acoustic guitar cover of the hit Lady Gaga and Bruno Mars duet, with soulful vocals and fingerpicking.' },
+    { videoId: '9wniwSCyDoA', title: 'Sultans Of Swing Solo - Dire Straits (Acoustic Cover)', channel: 'Acoustic Guitarist', desc: 'An incredible acoustic rendition of the legendary Sultans of Swing guitar solo by Dire Straits.' },
+    { videoId: 'hxwjT90i8Ys', title: 'Stairway To Heaven Solo - Led Zeppelin (Acoustic Cover)', channel: 'Acoustic Guitarist', desc: 'The iconic Stairway to Heaven guitar solo faithfully recreated on acoustic guitar — pure mastery.' },
+    { videoId: 'uOwQ9QwhUA8', title: 'Birds of a Feather - Billie Eilish (Acoustic Cover)', channel: 'Conner Smith', desc: 'A beautiful stripped-down acoustic cover of Billie Eilish\'s Birds of a Feather with warm guitar tones.' },
+    { videoId: 'cMuKdny1UoY', title: 'Top 50 Guitar Covers of Popular Songs', channel: 'Habana Music', desc: 'A collection of the best instrumental acoustic guitar covers of popular songs — perfect for work, study, or relaxation.' },
+    { videoId: 'L0GXfGb9GjY', title: 'Hotel California - Eagles (Acoustic Cover)', channel: 'Acoustic Trench', desc: 'A masterful acoustic guitar cover of Hotel California capturing every nuance of the original classic.' },
+    { videoId: 'dQhIbLGBSAM', title: 'Bohemian Rhapsody - Queen (Fingerstyle Guitar)', channel: 'Luca Stricagnoli', desc: 'An extraordinary fingerstyle guitar arrangement of Bohemian Rhapsody — one guitarist, all parts.' },
+    { videoId: 'S33tWZqXhnk', title: 'Shape of You - Ed Sheeran (Acoustic Cover)', channel: 'Eddie van der Meer', desc: 'A crisp, energetic fingerstyle cover of Ed Sheeran\'s worldwide hit Shape of You.' },
+    { videoId: 'ialZcLaI17Y', title: 'Neon - John Mayer (Acoustic Cover)', channel: 'Mateus Asato', desc: 'An incredibly technical acoustic cover of John Mayer\'s Neon — one of the hardest songs to play on guitar.' },
+    { videoId: 'oABEGFiFdOk', title: 'Billie Jean - Michael Jackson (Fingerstyle Guitar)', channel: 'Sungha Jung', desc: 'Guitar prodigy Sungha Jung plays a stunning fingerstyle arrangement of Michael Jackson\'s Billie Jean.' },
+    { videoId: 'hRKpGj0fWJo', title: 'Hallelujah - Leonard Cohen (Acoustic Cover)', channel: 'Boyce Avenue', desc: 'A hauntingly beautiful acoustic rendition of Leonard Cohen\'s timeless Hallelujah.' },
+    { videoId: 'LR6_LePCIxc', title: 'Thinking Out Loud - Ed Sheeran (Acoustic Cover)', channel: 'Boyce Avenue', desc: 'A warm and soulful acoustic guitar cover of Ed Sheeran\'s romantic ballad Thinking Out Loud.' },
+  ],
+};
 
 async function generateVideos(existing) {
-  // Vary the search queries for freshness
-  const salsaVariants = ['salsa dancing', 'best salsa dance', 'salsa performance', 'salsa bachata dance', 'latin dance salsa'];
-  const guitarVariants = ['acoustic guitar cover', 'guitar cover popular song', 'acoustic cover song', 'fingerstyle guitar cover', 'unplugged guitar cover'];
-  
-  const salsaQuery = salsaVariants[Math.floor(Math.random() * salsaVariants.length)];
-  const guitarQuery = guitarVariants[Math.floor(Math.random() * guitarVariants.length)];
-  const queries = [salsaQuery, guitarQuery];
-  
   const items = [];
-  for (const q of queries) {
-    try {
-      const results = await searchYouTube(q);
-      
-      // Find first video we haven't used before
-      const match = results.find(r => r.videoId && !existing.videoIds.has(r.videoId));
-      if (!match) {
-        console.log(`  No new videos found for "${q}" (${results.length} results, all seen)`);
-        continue;
-      }
-      
-      const { videoId } = match;
-      existing.videoIds.add(videoId);
-      
-      let title = match.title || q;
-      let channelName = match.channelName || '';
-      const thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-      
-      // If we didn't get title from Invidious, try oEmbed
-      if (!match.title) {
-        try {
-          const oembed = await fetchJSON(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
-          title = oembed.title || q;
-          channelName = oembed.author_name || channelName;
-        } catch {}
-      }
-
-      const desc = match.description || (channelName ? `By ${channelName}` : '');
-      const item = {
-        type: 'video', title,
-        description: desc,
-        summary: channelName ? `${channelName} — found via "${q}"` : `Found via "${q}"`,
-        imageUrl: thumbnail,
-        links: [{ label: 'Watch on YouTube', url: `https://www.youtube.com/watch?v=${videoId}` }],
-        metadata: { videoId, channelName, viewCount: match.viewCount, duration: match.lengthSeconds },
-      };
-      if (!isDuplicate(item, existing)) items.push(item);
-    } catch (e) {
-      console.error(`Video generation failed for "${q}":`, e.message);
+  
+  // Pick one salsa video we haven't shown
+  const shuffledSalsa = shuffle(CURATED_VIDEOS.salsa);
+  for (const v of shuffledSalsa) {
+    if (!existing.videoIds.has(v.videoId) && !existing.titles.has(v.title.toLowerCase().trim())) {
+      existing.videoIds.add(v.videoId);
+      items.push({
+        type: 'video',
+        title: v.title,
+        description: v.desc,
+        summary: `${v.channel} — Salsa Dancing`,
+        imageUrl: `https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`,
+        links: [{ label: 'Watch on YouTube', url: `https://www.youtube.com/watch?v=${v.videoId}` }],
+        metadata: { videoId: v.videoId, channelName: v.channel, viewCount: null, duration: null },
+      });
+      break;
     }
   }
+
+  // Pick one guitar video we haven't shown
+  const shuffledGuitar = shuffle(CURATED_VIDEOS.guitar);
+  for (const v of shuffledGuitar) {
+    if (!existing.videoIds.has(v.videoId) && !existing.titles.has(v.title.toLowerCase().trim())) {
+      existing.videoIds.add(v.videoId);
+      items.push({
+        type: 'video',
+        title: v.title,
+        description: v.desc,
+        summary: `${v.channel} — Acoustic Guitar Cover`,
+        imageUrl: `https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`,
+        links: [{ label: 'Watch on YouTube', url: `https://www.youtube.com/watch?v=${v.videoId}` }],
+        metadata: { videoId: v.videoId, channelName: v.channel, viewCount: null, duration: null },
+      });
+      break;
+    }
+  }
+
   return items;
 }
 
