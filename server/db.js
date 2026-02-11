@@ -7,21 +7,18 @@ export async function connectDB() {
   console.log('MongoDB connected');
 }
 
-const eventSchema = new mongoose.Schema({
-  date: { type: String, required: true, index: true },   // "MM-DD"
-  year: { type: String },
-  text: { type: String, required: true },
-  pages: [{ title: String, thumbnail: String, url: String, extract: String }],
-  type: { type: String, enum: ['event', 'birth', 'death'], default: 'event' },
-}, { timestamps: true });
-
-eventSchema.index({ date: 1, year: 1, type: 1 }, { unique: true });
-
-const dayMetaSchema = new mongoose.Schema({
-  date: { type: String, required: true, unique: true },  // "MM-DD"
-  generatedAt: { type: Date, default: Date.now },
-  eventCount: Number,
+const feedItemSchema = new mongoose.Schema({
+  date: { type: String, required: true, index: true }, // YYYY-MM-DD
+  type: { type: String, enum: ['video', 'book', 'fashion', 'ai_trend', 'history'], required: true },
+  title: { type: String, required: true },
+  description: { type: String, default: '' },
+  summary: { type: String, default: '' },
+  imageUrl: { type: String, default: null },
+  links: [{ label: String, url: String }],
+  metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+  createdAt: { type: Date, default: Date.now },
 });
 
-export const HistoryEvent = mongoose.model('HistoryEvent', eventSchema);
-export const DayMeta = mongoose.model('DayMeta', dayMetaSchema);
+feedItemSchema.index({ date: 1, type: 1 });
+
+export const FeedItem = mongoose.model('FeedItem', feedItemSchema);

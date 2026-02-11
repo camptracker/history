@@ -3,97 +3,103 @@ import './App.css';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-const MONTHS = ['January','February','March','April','May','June',
-  'July','August','September','October','November','December'];
-
 function pad(n) { return String(n).padStart(2, '0'); }
-
-function dateKey(d) { return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
-
+function dateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 function formatDate(d) {
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
-
-function shiftDate(d, offset) {
-  const n = new Date(d);
-  n.setDate(n.getDate() + offset);
-  return n;
-}
+function shiftDate(d, offset) { const n = new Date(d); n.setDate(n.getDate() + offset); return n; }
 
 const TYPE_CONFIG = {
-  event: { label: 'Events', emoji: '📜', color: 'var(--event)' },
-  birth: { label: 'Births', emoji: '🎂', color: 'var(--birth)' },
-  death: { label: 'Deaths', emoji: '🕊️', color: 'var(--death)' },
+  video: { emoji: '🎬', label: 'Video', color: '#e74c3c' },
+  book: { emoji: '📚', label: 'Book', color: '#9b59b6' },
+  fashion: { emoji: '👗', label: 'Fashion', color: '#e91e8c' },
+  ai_trend: { emoji: '🤖', label: 'AI Trend', color: '#00d4ff' },
+  history: { emoji: '📜', label: 'History', color: '#2cb67d' },
 };
 
-function EventCard({ item }) {
-  const cfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.event;
-  const thumb = item.pages?.[0]?.thumbnail;
+function FeedCard({ item }) {
+  const cfg = TYPE_CONFIG[item.type] || TYPE_CONFIG.history;
 
   return (
-    <div className="event-card" style={{ borderLeftColor: cfg.color }}>
-      <div className="event-content">
-        <div className="event-header">
-          {item.year && <span className="event-year" style={{ color: cfg.color }}>{item.year}</span>}
-          <span className="event-type-badge" style={{ background: cfg.color }}>{cfg.emoji}</span>
+    <article className={`feed-card feed-card--${item.type}`} style={{ '--card-accent': cfg.color }}>
+      <div className="feed-card__badge">
+        <span className="feed-card__emoji">{cfg.emoji}</span>
+        <span className="feed-card__type">{cfg.label}</span>
+      </div>
+
+      {item.imageUrl && (
+        <div className={`feed-card__image ${item.type === 'fashion' ? 'feed-card__image--large' : ''}`}>
+          <img src={item.imageUrl} alt={item.title} loading="lazy" />
         </div>
-        <p className="event-text">{item.text}</p>
-        {item.pages?.[0]?.extract && (item.type === 'birth' || item.type === 'death') && (
-          <p className="event-extract">💬 {item.pages[0].extract}</p>
+      )}
+
+      <div className="feed-card__body">
+        <h3 className="feed-card__title">{item.title}</h3>
+
+        {item.type === 'history' && item.metadata?.year && (
+          <span className="feed-card__year-badge">{item.metadata.year}</span>
         )}
-        {item.pages?.length > 0 && (
-          <div className="event-links">
-            {item.pages.map((p, i) => (
-              <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="wiki-link">
-                {p.title} →
+
+        {item.type === 'book' && item.metadata?.author && (
+          <p className="feed-card__author">by {item.metadata.author}</p>
+        )}
+
+        <p className="feed-card__desc">{item.description || item.summary}</p>
+
+        {item.type === 'book' && item.metadata?.quotes?.length > 0 && (
+          <div className="feed-card__quotes">
+            {item.metadata.quotes.map((q, i) => (
+              <blockquote key={i} className="feed-card__quote">&ldquo;{q}&rdquo;</blockquote>
+            ))}
+          </div>
+        )}
+
+        {item.type === 'video' && item.metadata?.channelName && (
+          <p className="feed-card__channel">📺 {item.metadata.channelName}</p>
+        )}
+
+        {item.links?.length > 0 && (
+          <div className="feed-card__links">
+            {item.links.map((l, i) => (
+              <a key={i} href={l.url} target="_blank" rel="noopener noreferrer" className="feed-card__link">
+                {l.label} →
               </a>
             ))}
           </div>
         )}
       </div>
-      {thumb && (
-        <div className="event-thumb">
-          <img src={thumb} alt="" loading="lazy" />
-        </div>
-      )}
-    </div>
+    </article>
   );
 }
 
 export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [data, setData] = useState(null);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all');
   const [generating, setGenerating] = useState(false);
 
-  const fetchEvents = useCallback(async (date) => {
+  const fetchFeed = useCallback(async (date) => {
     setLoading(true);
     setError(null);
     try {
-      const key = dateKey(date);
-      const res = await fetch(`${API}/api/events/${key}`);
+      const ds = dateStr(date);
+      const res = await fetch(`${API}/api/feed/${ds}`);
       const json = await res.json();
       if (json.count === 0) {
-        // No data yet — try generating
         setGenerating(true);
-        const mm = date.getMonth() + 1;
-        const dd = date.getDate();
-        const yyyy = date.getFullYear();
-        const genRes = await fetch(`${API}/api/generate`, {
+        await fetch(`${API}/api/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date: `${yyyy}-${pad(mm)}-${pad(dd)}` }),
+          body: JSON.stringify({ date: ds }),
         });
-        await genRes.json();
         setGenerating(false);
-        // Re-fetch
-        const res2 = await fetch(`${API}/api/events/${key}`);
+        const res2 = await fetch(`${API}/api/feed/${ds}`);
         const json2 = await res2.json();
-        setData(json2);
+        setItems(json2.items || []);
       } else {
-        setData(json);
+        setItems(json.items || []);
       }
     } catch (e) {
       setError(e.message);
@@ -103,7 +109,7 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { fetchEvents(currentDate); }, [currentDate, fetchEvents]);
+  useEffect(() => { fetchFeed(currentDate); }, [currentDate, fetchFeed]);
 
   const goNext = () => setCurrentDate(d => shiftDate(d, 1));
   const goPrev = () => setCurrentDate(d => shiftDate(d, -1));
@@ -112,80 +118,59 @@ export default function App() {
   const handleRegenerate = async () => {
     setGenerating(true);
     try {
-      await fetch(`${API}/api/generate`, { method: 'POST' });
-      await fetchEvents(currentDate);
+      const ds = dateStr(currentDate);
+      await fetch(`${API}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: ds }),
+      });
+      await fetchFeed(currentDate);
     } finally {
       setGenerating(false);
     }
   };
 
-  const allEvents = data ? [...(data.events || []), ...(data.births || []), ...(data.deaths || [])] : [];
-  const filtered = filter === 'all' ? allEvents : allEvents.filter(e => e.type === filter);
-  const sorted = [...filtered].sort((a, b) => {
-    const ya = parseInt(a.year) || 0;
-    const yb = parseInt(b.year) || 0;
-    return ya - yb;
-  });
+  const typeOrder = ['video', 'book', 'fashion', 'ai_trend', 'history'];
+  const sorted = [...items].sort((a, b) => typeOrder.indexOf(a.type) - typeOrder.indexOf(b.type));
 
   return (
     <div className="app">
       <header className="header">
-        <h1 className="title">On This Day</h1>
-        <p className="subtitle">Moments that shaped history</p>
+        <h1 className="title">Daily Discovery</h1>
+        <p className="subtitle">Your curated feed of videos, books, trends & history</p>
       </header>
 
-      <div className="date-nav">
-        <button className="nav-btn" onClick={goPrev}>← Prev</button>
+      <nav className="date-nav">
+        <button className="nav-btn" onClick={goPrev}>‹ Prev</button>
         <div className="date-display">
           <h2>{formatDate(currentDate)}</h2>
           <button className="today-btn" onClick={goToday}>Today</button>
         </div>
-        <button className="nav-btn" onClick={goNext}>Next →</button>
-      </div>
+        <button className="nav-btn" onClick={goNext}>Next ›</button>
+      </nav>
 
       <div className="controls">
-        <div className="filters">
-          {['all', 'event', 'birth', 'death'].map(f => (
-            <button
-              key={f}
-              className={`filter-btn ${filter === f ? 'active' : ''}`}
-              onClick={() => setFilter(f)}
-              style={f !== 'all' && filter === f ? { background: TYPE_CONFIG[f].color } : {}}
-            >
-              {f === 'all' ? '🌍 All' : `${TYPE_CONFIG[f].emoji} ${TYPE_CONFIG[f].label}`}
-            </button>
-          ))}
-        </div>
         <button className="regen-btn" onClick={handleRegenerate} disabled={generating}>
-          {generating ? '⏳ Generating...' : '🔄 Regenerate'}
+          {generating ? '⏳ Generating...' : '🔄 Regenerate Feed'}
         </button>
       </div>
 
       {loading && (
         <div className="loading">
           <div className="spinner" />
-          <p>{generating ? 'Fetching historical data...' : 'Loading...'}</p>
+          <p>{generating ? 'Discovering content for you...' : 'Loading feed...'}</p>
         </div>
       )}
 
       {error && <div className="error">⚠️ {error}</div>}
 
       {!loading && !error && (
-        <>
-          <div className="stats">
-            <span>{sorted.length} events</span>
-            {data?.generatedAt && (
-              <span className="gen-time">
-                Generated {new Date(data.generatedAt).toLocaleString()}
-              </span>
-            )}
-          </div>
-          <div className="feed">
-            {sorted.map((item, i) => (
-              <EventCard key={`${item.year}-${item.type}-${i}`} item={item} />
-            ))}
-          </div>
-        </>
+        <div className="feed">
+          {sorted.length === 0 && <p className="empty">No items yet. Hit Regenerate!</p>}
+          {sorted.map((item, i) => (
+            <FeedCard key={item._id || i} item={item} />
+          ))}
+        </div>
       )}
     </div>
   );
